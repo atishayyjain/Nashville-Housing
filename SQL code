@@ -1,0 +1,215 @@
+-- DATA EXPLORATION
+
+select *
+from [Project 2].dbo.Nashville
+
+
+
+
+-- STANDARDIZE DATA FORMAT
+
+select SaleDate, Convert(Date,SaleDate)
+from [Project 2].dbo.Nashville
+
+alter table [Project 2].dbo.Nashville
+add SaleDateConverted Date;
+
+Update [Project 2].dbo.Nashville
+set SaleDateConverted = convert(date,SaleDate)
+
+select SaleDateConverted
+from [Project 2].dbo.Nashville
+
+Alter Table [Project 2].dbo.Nashville
+Drop Column SaleDate
+
+
+
+
+-- POPULATE PROPERTY ADDRESS DATA
+
+select *
+from [Project 2].dbo.Nashville
+-- where PropertyAddress is nULL
+order by ParcelID
+
+select a.ParcelId, a.PropertyAddress, b.parcelId, b.PropertyAddress, isnull(a.PropertyAddress, b.PropertyAddress)
+from [Project 2].dbo.Nashville a
+join [Project 2].dbo.Nashville b
+on a.ParcelId = b.ParcelId
+And a.UniqueID <> b.UniqueID
+where a.propertyaddress is null
+
+Update a
+set propertyaddress = isnull(a.PropertyAddress, b.PropertyAddress)
+from [Project 2].dbo.Nashville a
+join [Project 2].dbo.Nashville b
+on a.ParcelId = b.ParcelId
+And a.UniqueID <> b.UniqueID
+where a.propertyaddress is null
+
+
+
+
+-- BREAKING OUT ADDRESS INTO INDIVIDUAL COLUMNS (ADDRESS, STATE, CITY)
+-- Using Substring
+
+select PropertyAddress
+from [Project 2].dbo.Nashville
+
+Select 
+SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress)-1) as Address,
+SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress)+1, LEN(PropertyAddress)) as City
+from [Project 2].dbo.Nashville
+
+Alter table [Project 2].dbo.Nashville
+add propertyAddressSplit Nvarchar(255);
+
+update [Project 2].dbo.Nashville
+set propertyAddressSplit = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress)-1)
+
+Alter table [Project 2].dbo.Nashville
+add propertyAddressCity Nvarchar(255);
+
+update [Project 2].dbo.Nashville
+set propertyAddressCity = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress)+1, LEN(PropertyAddress))
+
+Alter table [Project 2].dbo.Nashville
+Drop Column PropertyAddress
+
+select *
+from [Project 2].dbo.Nashville
+
+
+
+-- Using ParseName on OwnerAddress Field
+
+
+select OwnerAddress
+from [Project 2].dbo.Nashville
+
+Select 
+PARSENAME(Replace(OwnerAddress, ',', '.'), 3) as Address, --Parsename works only on periods and seperates the string where it finds it, just like split in python
+PARSENAME(Replace(OwnerAddress, ',', '.'), 2) as city,    -- Parsename works in reverse direction, index=1 starts backwards.
+PARSENAME(Replace(OwnerAddress, ',', '.'), 1) as State 
+from [Project 2].dbo.Nashville
+
+Alter table [Project 2].dbo.Nashville
+add OwnerAddressSplit nvarchar(255)
+
+update [Project 2].dbo.Nashville
+set OwnerAddressSplit = PARSENAME(Replace(OwnerAddress, ',', '.'), 3)
+
+Alter table [Project 2].dbo.Nashville
+add OwnerCitySplit nvarchar(255)
+
+update [Project 2].dbo.Nashville
+set OwnerCitySplit = PARSENAME(Replace(OwnerAddress, ',', '.'), 2)
+
+Alter table [Project 2].dbo.Nashville
+add OwnerStateSplit nvarchar(255)
+
+update [Project 2].dbo.Nashville
+set OwnerStateSplit = PARSENAME(Replace(OwnerAddress, ',', '.'), 1)
+
+-- cant use substring in owner address as it has more than one comma, so parsename will work after converting comma to periods using replace
+
+select
+SUBSTRING(OwnerAddress, 1, Charindex(',', OwnerAddress)-1) as Address,
+--Substring(OwnerAddress, 
+Substring(OwnerAddress, Charindex(',', OwnerAddress)+1, CharIndex(',', OwnerAddress)-1) as city
+from [Project 2].dbo.Nashville
+
+
+
+
+-- CHANGE Y AND N TO YES AND NO IN 'SOLD AS VACANT' FIELD
+
+select * 
+from [Project 2].dbo.Nashville
+
+select soldasvacant,
+case when soldasvacant = 'Y' then 'Yes'
+	 when soldasvacant = 'N' then 'NO'
+	 else soldasvacant
+	 end
+	 from [Project 2].dbo.Nashville
+
+
+update [Project 2].dbo.Nashville
+set soldasvacant = 'No'
+where soldasvacant = 'N'
+
+update [Project 2].dbo.Nashville
+set soldasvacant = 'Yes'
+where soldasvacant = 'Y'
+
+select distinct(soldasvacant), count(soldasvacant)
+from [Project 2].dbo.Nashville
+group by soldasvacant
+
+
+
+
+-- REMOVE DUPLICATES
+
+select parcelid
+from [Project 2].dbo.Nashville
+group by parcelid
+having Count(parcelid) > 1
+
+Select uniqueid
+from [Project 2].dbo.Nashville
+where parcelid in (select parcelid
+from [Project 2].dbo.Nashville
+group by parcelid
+having Count(parcelid) > 1)
+
+
+with rownumcte as(
+Select *, 
+	ROW_NUMBER() over (
+	PARTITION BY ParcelID,
+				PropertyAddressSplit,
+				PropertyAddressCity,
+				SalePrice,
+				LegalReference
+				ORDER BY
+					UniqueID
+					) Row_num
+
+from [Project 2].dbo.Nashville)
+--order by ParcelId
+
+delete
+from  rownumcte
+where row_num > 1
+
+
+with rownumcte as(
+Select *, 
+	ROW_NUMBER() over (
+	PARTITION BY ParcelID,
+				PropertyAddressSplit,
+				PropertyAddressCity,
+				SalePrice,
+				LegalReference
+				ORDER BY
+					UniqueID
+					) Row_num
+
+from [Project 2].dbo.Nashville)
+--order by ParcelId
+
+select *
+from  rownumcte
+where row_num > 1
+
+
+
+
+--DELETE UNUSED COLUMNS
+
+
+Alter Table [Project 2].dbo.Nashville
+Drop Column SaleDate
